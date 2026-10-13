@@ -1,30 +1,18 @@
-import { useEffect, useState, type FormEvent } from 'react'
+
+import { useState, type FormEvent } from 'react'
 import { Link, useNavigate } from 'react-router-dom'
 import { ChevronLeft, ChevronDown } from 'lucide-react'
 import Navbar from '../components/Navbar'
 
-interface Task {
-  id: number
-  title: string
-  description: string
-  dueDate: string
-  category: string
-  completed: boolean
-}
-
 function NewTask() {
-  // =========================
-  // FORM STATE
-  // =========================
+  const navigate = useNavigate()
 
   const [title, setTitle] = useState('')
   const [description, setDescription] = useState('')
   const [dueDate, setDueDate] = useState('')
   const [category, setCategory] = useState('')
-
-  // =========================
-  // VALIDATION ERRORS
-  // =========================
+  const [loading, setLoading] = useState(false)
+  const [apiError, setApiError] = useState('')
 
   const [errors, setErrors] = useState({
     title: '',
@@ -32,36 +20,6 @@ function NewTask() {
     dueDate: '',
     category: '',
   })
-
-  // =========================
-  // TASK STATE
-  // =========================
-
-  const [tasks, setTasks] = useState<Task[]>(() => {
-    const savedTasks = localStorage.getItem('tasks')
-
-    if (savedTasks) {
-      return JSON.parse(savedTasks)
-    }
-
-    return []
-  })
-
-  const navigate = useNavigate()
-
-  // =========================
-  // USE EFFECT
-  // Saves tasks to localStorage
-  // whenever the tasks change
-  // =========================
-
-  useEffect(() => {
-    localStorage.setItem('tasks', JSON.stringify(tasks))
-  }, [tasks])
-
-  // =========================
-  // VALIDATION
-  // =========================
 
   const validateForm = () => {
     const newErrors = {
@@ -73,19 +31,16 @@ function NewTask() {
 
     let isValid = true
 
-    // Validate title
     if (!title.trim()) {
       newErrors.title = 'Task title is required.'
       isValid = false
     }
 
-    // Validate description
     if (!description.trim()) {
       newErrors.description = 'Description is required.'
       isValid = false
     }
 
-    // Validate due date
     if (!dueDate) {
       newErrors.dueDate = 'Due date is required.'
       isValid = false
@@ -101,69 +56,73 @@ function NewTask() {
       }
     }
 
-    // Validate category
     if (!category) {
       newErrors.category = 'Please select a tag.'
       isValid = false
     }
 
     setErrors(newErrors)
-
     return isValid
   }
 
-  // =========================
-  // DONE BUTTON
-  // =========================
-
-  const handleSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    setApiError('')
 
-    // Check all fields before saving
-    const isValid = validateForm()
+    if (!validateForm()) return
 
-    // Stop here if validation fails
-    if (!isValid) {
+    const token = sessionStorage.getItem('taskdutyToken')
+
+    if (!token) {
+      setApiError(
+        'Your login token is missing. Please log in through Postman again and save the new token in this browser session.',
+      )
       return
     }
 
-    // Create the new task
-    const newTask: Task = {
-      id: Date.now(),
-      title: title.trim(),
-      description: description.trim(),
-      dueDate,
-      category,
-      completed: false,
+    setLoading(true)
+
+    try {
+      const response = await fetch('http://localhost:5000/api/tasks', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${token}`,
+        },
+        body: JSON.stringify({
+          title: title.trim(),
+          description: description.trim(),
+          dueDate,
+          category,
+          completed: false,
+        }),
+      })
+
+      const data = await response.json()
+
+      if (!response.ok) {
+        throw new Error(data.message || 'Failed to create task.')
+      }
+
+      navigate('/tasks')
+    } catch (error) {
+      setApiError(
+        error instanceof Error
+          ? error.message
+          : 'Could not create the task. Check that your backend is running.',
+      )
+    } finally {
+      setLoading(false)
     }
-
-    // Add the new task to our task state
-    setTasks((currentTasks) => [...currentTasks, newTask])
-
-    // Go to My Tasks after creating the task
-    navigate('/tasks')
   }
 
-  // =========================
-  // GET TODAY'S DATE
-  // Used to prevent past dates
-  // =========================
-
-  const today = new Date().toISOString().split('T')[0]
-
-  // =========================
-  // PAGE
-  // =========================
+  const today = new Date().toLocaleDateString('en-CA')
 
   return (
     <div className="min-h-screen bg-[#FAF9FC]">
       <Navbar showAllTasks />
 
       <main className="mx-auto max-w-[1002px] px-6 py-9">
-        {/* =========================
-            PAGE HEADING
-        ========================= */}
-
         <div className="mb-10 flex items-center gap-2">
           <Link
             to="/tasks"
@@ -177,16 +136,7 @@ function NewTask() {
           </h1>
         </div>
 
-        {/* =========================
-            FORM
-        ========================= */}
-
         <form onSubmit={handleSubmit} className="space-y-8">
-
-          {/* =========================
-              TASK TITLE
-          ========================= */}
-
           <div className="relative">
             <label
               htmlFor="title"
@@ -208,17 +158,10 @@ function NewTask() {
               }`}
             />
 
-            {/* Title error */}
             {errors.title && (
-              <p className="mt-1 text-sm text-red-500">
-                {errors.title}
-              </p>
+              <p className="mt-1 text-sm text-red-500">{errors.title}</p>
             )}
           </div>
-
-          {/* =========================
-              DESCRIPTION
-          ========================= */}
 
           <div className="relative">
             <label
@@ -240,17 +183,12 @@ function NewTask() {
               }`}
             />
 
-            {/* Description error */}
             {errors.description && (
               <p className="mt-1 text-sm text-red-500">
                 {errors.description}
               </p>
             )}
           </div>
-
-          {/* =========================
-              DUE DATE
-          ========================= */}
 
           <div className="relative">
             <label
@@ -273,66 +211,46 @@ function NewTask() {
               }`}
             />
 
-            {/* Due date error */}
             {errors.dueDate && (
-              <p className="mt-1 text-sm text-red-500">
-                {errors.dueDate}
-              </p>
+              <p className="mt-1 text-sm text-red-500">{errors.dueDate}</p>
             )}
           </div>
 
-          {/* =========================
-              TAGS
-          ========================= */}
-
           <div className="relative">
-            <label
-              className="absolute -top-2 left-6 z-10 bg-[#FAF9FC] px-1 text-[15px] text-[#A6A6A6]"
-            >
+            <label className="absolute -top-2 left-6 z-10 bg-[#FAF9FC] px-1 text-[15px] text-[#A6A6A6]">
               Tags
             </label>
 
             <div
               className={`relative flex h-[47px] w-full items-center rounded-[4px] border px-6 ${
-                errors.category
-                  ? 'border-red-400'
-                  : 'border-[#D5D5D5]'
+                errors.category ? 'border-red-400' : 'border-[#D5D5D5]'
               }`}
             >
-              {/* Tag buttons */}
               <div className="flex items-center gap-3">
-                {/* Urgent */}
                 <button
                   type="button"
                   onClick={() => {
                     setCategory('Urgent')
-                    setErrors((currentErrors) => ({
-                      ...currentErrors,
-                      category: '',
-                    }))
+                    setErrors((current) => ({ ...current, category: '' }))
                   }}
                   className={`rounded-[2px] px-2 py-[2px] text-[12px] font-medium ${
                     category === 'Urgent'
-                      ? 'bg-[#A6A6A6] text-white'
+                      ? 'bg-[#F16B6B] text-white'
                       : 'bg-[#E5E5E5] text-[#777777]'
                   }`}
                 >
                   Urgent
                 </button>
 
-                {/* Important */}
                 <button
                   type="button"
                   onClick={() => {
                     setCategory('Important')
-                    setErrors((currentErrors) => ({
-                      ...currentErrors,
-                      category: '',
-                    }))
+                    setErrors((current) => ({ ...current, category: '' }))
                   }}
                   className={`rounded-[2px] px-2 py-[2px] text-[12px] font-medium ${
                     category === 'Important'
-                      ? 'bg-[#A6A6A6] text-white'
+                      ? 'bg-[#73C3A6] text-white'
                       : 'bg-[#E5E5E5] text-[#777777]'
                   }`}
                 >
@@ -340,7 +258,6 @@ function NewTask() {
                 </button>
               </div>
 
-              {/* Dropdown arrow */}
               <ChevronDown
                 size={23}
                 strokeWidth={2}
@@ -348,7 +265,6 @@ function NewTask() {
               />
             </div>
 
-            {/* Category error */}
             {errors.category && (
               <p className="mt-1 text-sm text-red-500">
                 {errors.category}
@@ -356,21 +272,20 @@ function NewTask() {
             )}
           </div>
 
-          {/* =========================
-              DONE BUTTON
-          ========================= */}
+          {apiError && (
+            <p role="alert" className="text-sm text-red-600">
+              {apiError}
+            </p>
+          )}
 
           <button
             type="submit"
-            className="mt-3 h-[46px] w-full rounded-[4px] bg-[#9747D7] text-[16px] font-medium text-white transition hover:bg-[#8235C2]"
+            disabled={loading}
+            className="mt-3 h-[46px] w-full rounded-[4px] bg-[#9747D7] text-[16px] font-medium text-white transition hover:bg-[#8235C2] disabled:cursor-not-allowed disabled:opacity-60"
           >
-            Done
+            {loading ? 'Saving Task...' : 'Done'}
           </button>
         </form>
-
-        {/* =========================
-            BACK TO TOP
-        ========================= */}
 
         <div className="mt-6 text-center">
           <a

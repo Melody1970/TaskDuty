@@ -6,6 +6,7 @@ import {
   getTask,
   updateTask,
   deleteTask,
+  searchTasks,
 } from '../controllers/taskController.js'
 
 import authMiddleware from '../middleware/authMiddleware.js'
@@ -18,6 +19,8 @@ router.use(authMiddleware)
 router.post('/', createTask)
 
 router.get('/', getTasks)
+
+router.get('/search', searchTasks)
 
 router.get('/:id', getTask)
 
